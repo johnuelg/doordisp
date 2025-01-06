@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<head>
+<meta charset="utf-8">
+<title>Older or younger</title>
+<link rel="stylesheet" href="style/style.css" type="text/css" media="screen" />
+<link rel="stylesheet" type="text/css" href="//cloud.typography.com/7626174/696048/css/fonts.css" />
+<style type="text/css">@font-face {font-family:Inconsolata;font-style:normal;font-weight:400;src:url(/cf-fonts/s/inconsolata/5.0.16/latin-ext/400/normal.woff2);unicode-range:U+0100-02AF,U+0304,U+0308,U+0329,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20CF,U+2113,U+2C60-2C7F,U+A720-A7FF;font-display:swap;}@font-face {font-family:Inconsolata;font-style:normal;font-weight:400;src:url(/cf-fonts/s/inconsolata/5.0.16/vietnamese/400/normal.woff2);unicode-range:U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB;font-display:swap;}@font-face {font-family:Inconsolata;font-style:normal;font-weight:400;src:url(/cf-fonts/s/inconsolata/5.0.16/latin/400/normal.woff2);unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:swap;}</style>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes">
+</head>
+
+
+<div id="main-wrapper">
+	<div id="update">
+		<div id="customize" class="slider">
+            <div class="unitlab">Month</div>
+            <div id="uservalue"></div>
+            <div id="userslider" class="sliderholder"></div>
+		</div>
+        
+        <div class="clr"></div>
+	</div><!-- @end #update -->
+    
+    
+	<div id="summary">
+		<p></p>
+	</div>
+    
+    
+    <div id="chart-wrapper">
+        
+        
+        <div id="chart"></div>
+        
+    
+        <div class="clr"></div>
+    </div><!-- @end #chart-wrapper -->
+    
+    
+    <div class="clr"></div>
+</div><!-- @end #main-wrapper -->
+
+
+<script src="js/d3.v7.min.js"></script>
+<script src="js/d3-simple-slider.min.js"></script>
+<script type="text/javascript" src="js/pym.min.js"></script>
+
+<script>
+let USER_AGE = 11;    
+
+let transitionTime = 50;
+
+let margin, svg, width, height;    
+let x, xAxisBottom, xAxisTop;
+let y, yAxisLeft, yAxisRight;
+let xAxisEl, yAxisEl;
+let r, demo, demoP, demoCnt, circle;
+
+let xLabels = {
+    "m" : "Non-Urgent",
+    "f" : "Urgent"
+};
+
+let yLabels = {
+    "older" : "<= 1 hour",
+    "same" : "2-4 hours",
+    "younger" : "> 4 hours"
+};
+
+const monthCategories = [
+    "January", "February", "March", "April", "May", "June", "July", 
+    "August", "September", "October", "November", "December"
+];
+
+let slider;
+
+let pctFormat = d3.format(".2%"); // Percentage with 2 decimal places
+let nFormat = d3.format(",");    // Thousands separator
+
+
+let cntsByGroup = {
+    "older_f" : { "p" : [], "n": [] },
+    "older_m" : { "p" : [], "n": [] },
+    "younger_f" : { "p" : [], "n": [] },
+    "younger_m" : { "p" : [], "n": [] },
+    "same_f" : { "p" : [], "n": [] },
+    "same_m" : { "p" : [], "n": [] }
+};
+
+const theData = Promise.all([
+    d3.csv("data/bubble.csv", d3.autoType),
+]);
+
+theData.then(function(data) {
+    data[0].forEach(function(d,i) {
+        cntsByGroup["older_f"].p.push(d.p_older_f);
+        cntsByGroup["older_f"].n.push(d.n_older_f);
+        
+        cntsByGroup["older_m"].p.push(d.p_older_m);
+        cntsByGroup["older_m"].n.push(d.n_older_m);
+        
+        cntsByGroup["younger_f"].p.push(d.p_younger_f);
+        cntsByGroup["younger_f"].n.push(d.n_younger_f);
+        
+        cntsByGroup["younger_m"].p.push(d.p_younger_m);
+        cntsByGroup["younger_m"].n.push(d.n_younger_m);
+        
+        cntsByGroup["same_f"].p.push(d.p_same_f);
+        cntsByGroup["same_f"].n.push(d.n_same_f);
+        
+        cntsByGroup["same_m"].p.push(d.p_same_m);
+        cntsByGroup["same_m"].n.push(d.n_same_m);
+    });
+
+    // Dimensions of chart.
+    margin = { top: 20, right: 10, bottom: 20, left: 100 },
+        width = parseInt(d3.select("#chart").style('width'), 10) - margin.left - margin.right,
+        height = 650 - margin.top - margin.bottom; 
+    
+    // Define scales and axes.
+    x = d3.scaleBand()
+        .domain(["m", "f"])
+        .range([0, width]);
+    xAxisTop = d3.axisTop(x)
+        .tickSize(0)
+        .tickFormat(d => xLabels[d]);
+    y = d3.scaleBand()
+        .domain(["older", "same", "younger"])
+        .range([20, height]);
+    yAxisLeft = d3.axisLeft(y)
+        .tickSize(0)
+        .tickPadding(0)
+        .tickFormat(d => yLabels[d]);
+    r = d3.scaleSqrt()
+        .domain([0, 1])
+        .range([0, 110]);
+    
+    initChart();
+});
+
+function initChart() {
+    svg = d3.select("#chart").append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    // Divider line between male and female
+    svg.append("line")
+        .attr("class", "refline")
+        .attr("x1", x("f")).attr("x2", x("f"))
+        .attr("y1", 0)
+        .attr("y2", height);
+
+    // Circles
+    demo = svg.selectAll("g.demo")
+        .data(Object.keys(cntsByGroup))
+        .join("g")
+        .attr("class", "demo")
+        .attr("transform", d => "translate("+ (x(d.split("_")[1])+x.bandwidth()/2) + "," + (y(d.split("_")[0])+y.bandwidth()/2) +")");
+    
+    circle = demo.append("circle")
+        .attr("class", d => d)
+        .attr("fill", d => d.split("_")[1] == "m" ? "#e2a269" : "#78c5bd")
+        .attr("r", 1);
+        
+    demoP = demo.append("text")
+        .attr("class", "pct")
+        .attr("text-anchor", "middle")
+        .attr("dy", "-.2em")
+        .text(d => pctFormat(cntsByGroup[d].p[USER_AGE]));
+    
+    demoCnt = demo.append("text")
+        .attr("class", "cnt")
+        .attr("text-anchor", "middle")
+        .attr("dy", ".7em")
+        .text(d => nFormat(cntsByGroup[d].n[USER_AGE]));    
+    
+    // Add x-axis
+    xAxisEl = svg.append("g").attr("class", "x axis");
+    xAxisEl.call(xAxisTop);
+    
+    // Add y-axis
+    yAxisEl = svg.append("g").attr("class", "y axis")
+        .attr("transform", "translate(-"+margin.left+",0)");
+    yAxisEl.call(yAxisLeft)
+        .selectAll(".tick text")
+        .attr("text-anchor", "start");
+    
+    // Update and add
+    updateChart();
+    resize();
+    addInteraction();
+    
+    // For responsiveness.
+    var pymChild = new pym.Child();
+}
+
+function updateChart() {
+    circle
+        .attr("r", d => r(cntsByGroup[d].p[USER_AGE]));
+    
+    demoP
+        .text(d => pctFormat(cntsByGroup[d].p[USER_AGE]));
+    
+    demoCnt
+        .text(d => nFormat(cntsByGroup[d].n[USER_AGE]));    
+
+    // Update summary
+let nOlder = cntsByGroup["older_f"].n[USER_AGE] + cntsByGroup["older_m"].n[USER_AGE];
+let nYounger = cntsByGroup["younger_f"].n[USER_AGE] + cntsByGroup["younger_m"].n[USER_AGE];
+let summaryText;
+
+if (USER_AGE >= 0 && USER_AGE <= 9) {
+    summaryText = "Overall, Patients seen within 4 hours is: <span style='font-weight: bold; color: #0080ff;'>100%</span>";
+} else if (USER_AGE === 10) {
+    summaryText = "Overall, Patients seen within 4 hours is:<span style='font-weight: bold; color: #0080ff;'>98%</span>";
+} else if (USER_AGE === 11) {
+    summaryText = "Overall, Patients seen within 4 hours is:<span style='font-weight: bold; color: #0080ff;'>95%</span>";
+}
+
+// Update the summary paragraph
+d3.select("#summary p")
+    .html(summaryText);
+
+    // Update age ticker
+    d3.select("#uservalue").text(`${monthCategories[USER_AGE]} 2024 `);
+
+
+} // @end updateChart()
+
+
+function addInteraction() {
+    
+// Age slider
+slider = d3.sliderHorizontal()
+    .min(0).max(11)
+    .ticks(0)
+    .step(1)
+    .width(290)
+    .value(USER_AGE)
+    .handle(d3.symbol().type(d3.symbolCircle).size(600)())
+    .displayValue(false)
+    .on("onchange", function(val) {
+        USER_AGE = val;
+        updateChart();
+    });
+d3.select("#customize")
+    .append("svg")
+    .attr("width", 330)
+    .attr("height", 35)
+  .append("g")
+    .attr('transform', 'translate(20,20)')
+    .call(slider);
+	
+} // @end addInteraction()
+
+
+
+d3.select(window).on('resize', resize);
+
+function resize() {
+    
+    width = parseInt(d3.select("#chart-wrapper").style('width'), 10) - margin.left - margin.right;
+    height = 650 - margin.top - margin.bottom;
+	
+    // change dimensions of SVG	
+    d3.select(svg.node().parentNode)
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .style('width', (width + margin.left + margin.right) + 'px')
+        .style('height', (height + margin.top + margin.bottom) + 'px');
+    
+	// reference line
+	svg.select("line.refline")
+		.attr("x1", x("f")).attr("x2", x("f"))
+		.attr("y2", height);
+	
+    // resize the scales.
+    x.range([0, width]);
+    xAxisEl.call(xAxisTop);
+    yAxisEl.call(yAxisLeft);
+    
+	// circles
+	demo
+		.attr("transform", d => "translate("+ (x(d.split("_")[1])+x.bandwidth()/2) + "," + (y(d.split("_")[0])+y.bandwidth()/2) +")");
+    
+    // resize encodings.
+    updateChart();
+}
+
+
+
+// Text wrapping
+function wrap(text, width) {
+    text.each(function() {
+        let text = d3.select(this),
+        words = text.text().split(/\s+/).reverse(),
+        word,
+        line = [],
+        lineNumber = 0, //<-- 0!
+        lineHeight = 1.2, // ems
+        x = text.attr("x"), //<-- include the x!
+        y = text.attr("y"),
+        dy = text.attr("dy") ? parseInt(text.attr("dy")) : 0; //<-- null check
+        tspan = text.text(null).append("tspan").attr("x", x).attr("y", y).attr("dy", dy);
+        while (word = words.pop()) {
+            line.push(word);
+            tspan.text(line.join(" "));
+            if (tspan.node().getComputedTextLength() > width) {
+                line.pop();
+                tspan.text(line.join(" "));
+                line = [word];
+                tspan = text.append("tspan").attr("x", x).attr("y", y).attr("dy", ++lineNumber * lineHeight + dy).text(word);
+            }
+        }
+    });
+}
+</script>
